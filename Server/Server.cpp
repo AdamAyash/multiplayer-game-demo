@@ -194,7 +194,7 @@ bool Server::RegisterPlayer(const sockaddr_in& clientAddress)
 
 	m_NextPlayerId++;
 
-	//TODO if player exists;
+	//TODO if player exists;																			
 
 	m_oPlayers.push_back(player);
 
