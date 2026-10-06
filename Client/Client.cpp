@@ -13,6 +13,10 @@ Client::~Client()
 
 bool Client::ConnectToServer(const std::string strServerIp, const std::string strServerPort)
 {
+
+	if (m_oClientSocket != INVALID_SOCKET)
+		return true;
+
 	m_strServerIp = strServerIp;
 	m_strServerPort = strServerPort;
 

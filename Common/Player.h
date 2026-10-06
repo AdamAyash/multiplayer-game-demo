@@ -3,7 +3,7 @@
 #include <Common.h>
 #include <WinSock2.h>
 
-class  Player final
+class Player final
 {
 public:
 	Player();

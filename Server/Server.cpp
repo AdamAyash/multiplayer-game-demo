@@ -221,6 +221,10 @@ bool Server::UpdateWorldState()
 	for (int index = 0; index < oWorldStatePacket.playerCount; ++index)
 	{
 		oWorldStatePacket.players[index] = m_oPlayers[index];
+	}
+
+	for (int index = 0; index < oWorldStatePacket.playerCount; ++index)
+	{
 		SendPacket(oWorldStatePacket, m_oPlayers[index].oPlayerAddress);
 	}
 

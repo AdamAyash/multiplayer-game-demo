@@ -5,6 +5,10 @@
 #include "Shader.cpp"
 #include "glm/matrix.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+#include "Player.h"
+
+glm::vec3 m_oPlayerPosition = glm::vec3(0);
+float m_fPlayerVelocity = 2.0;
 
 Game::Game() 
 {
@@ -16,11 +20,13 @@ Game::~Game()
 
 bool Game::Start()
 {
-	if (!ConnectToServer())
-	{
-		//TODO ERROR;
-		return false;
-	}
+	std::cout << "Connecting to server...." << std::endl;
+
+	bool connected = false;
+
+	do {
+		connected = ConnectToServer();
+	} while (!connected);
 
 	if (!glfwInit())
 	{
@@ -44,6 +50,7 @@ bool Game::Start()
 	
 	glViewport(0, 0, Globals::nWindowWidth, Globals::nWindowHeight);
 	glfwSetFramebufferSizeCallback(m_pWindow, Game::framebuffer_size_callback);
+	glfwSetKeyCallback(m_pWindow, Game::key_callback);
 
 	return true;
 }
@@ -58,6 +65,17 @@ bool Game::ConnectToServer()
 		std::cerr << "Error connecting to server" << std::endl;
 		return false;
 	}
+
+	char* pPacketData = nullptr;
+	PacketTypes ePacketType = Undefined;
+	m_Client.ReceivePackets(ePacketType, pPacketData);
+
+	if (!HandlePacket(ePacketType, pPacketData))
+	{
+		return false;
+	}
+
+	std::cout << "Succsessfully connected to the server." << std::endl;
 
 	return true;
 }
@@ -112,12 +130,25 @@ void Game::Run()
 
 		glBindVertexArray(nVao);
 
-		oShader.use();
-		oShader.setMatrix4("modelMatrix", m_oModelMatrix);
-		oShader.setMatrix4("viewMatrix", m_oViewMatrix);
-		oShader.setMatrix4("projectionMatrix", m_oProjectionMatrix);
+		for (int i = 0; i < m_oPlayers.size(); ++i)
+		{
+			const Player* pCurrentPlayer = m_oPlayers[i];
+			if (!pCurrentPlayer)
+				continue;
 
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+			glm::vec3 oPosition = glm::vec3(pCurrentPlayer->x, pCurrentPlayer->y, 0);
+
+			m_oModelMatrix = glm::mat4(1.);
+			m_oModelMatrix = glm::translate(m_oModelMatrix, oPosition);
+			m_oModelMatrix = glm::scale(m_oModelMatrix, glm::vec3(50, 50, 0));
+
+			oShader.use();
+			oShader.setMatrix4("modelMatrix", m_oModelMatrix);
+			oShader.setMatrix4("viewMatrix", m_oViewMatrix);
+			oShader.setMatrix4("projectionMatrix", m_oProjectionMatrix);
+
+			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+		}
 
 		glfwSwapBuffers(m_pWindow);
 		glfwPollEvents();
@@ -143,7 +174,6 @@ bool Game::HandlePacket(PacketTypes ePacketType, char* pPacketData)
 		break;
 	}
 	default:
-		std::cerr << "Invalid packet type" << std::endl;
 		return false;
 	}
 	return true;
@@ -162,10 +192,6 @@ void Game::Update()
 	}
 
 	delete[] pPacketData;
-
-	m_oModelMatrix = glm::mat4(1.);
-	m_oModelMatrix = glm::translate(m_oModelMatrix, m_oPlayerPosition);
-	m_oModelMatrix = glm::scale(m_oModelMatrix, glm::vec3(150, 150, 0));
 }
 
 void Game::InitPlayer(const Packet& oPacket)
@@ -185,9 +211,34 @@ void Game::UpdateWordlState(const Packet& oPacket)
 	const WorldStatePacket* oWorldStatePacket = &reinterpret_cast<const WorldStatePacket&>(oPacket);
 	if (!oWorldStatePacket)
 		return;
+
+	for (int i = 0; i < oWorldStatePacket->playerCount; ++i)
+	{
+		Player* pCurrentPlayer = m_oPlayers[i];
+		if (pCurrentPlayer == nullptr)
+		{
+			pCurrentPlayer = new Player();
+			pCurrentPlayer->nId = oWorldStatePacket->players[i].nId;
+			pCurrentPlayer->x = oWorldStatePacket->players[i].x;
+			pCurrentPlayer->y = oWorldStatePacket->players[i].y;
+
+			m_oPlayers[i] = pCurrentPlayer;
+		}
+	}
 }
 
 void Game::framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
 	glViewport(0, 0, width, height);
+}
+
+void Game::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) 
+{
+	if (key == GLFW_KEY_A && action == GLFW_PRESS) {
+		m_oPlayerPosition.x -= m_fPlayerVelocity;
+	}
+
+	if (key == GLFW_KEY_D && action == GLFW_PRESS) {
+		m_oPlayerPosition.x += m_fPlayerVelocity;
+	}
 }
