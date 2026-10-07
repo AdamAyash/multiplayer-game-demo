@@ -8,8 +8,11 @@ enum PacketTypes : uint8_t
 {
 	Undefined = -1,
 	Connect = 1,
+	HandShake,
+	CreatePlayer,
 	Welcome,
-	WorldState
+	WorldState,
+	PlayerInput
 };
 
 #pragma pack(push, 1)
@@ -44,6 +47,28 @@ struct ConnectPacket : public Packet
 	}
 };
 
+struct HandShakePacket : public Packet
+{
+	HandShakePacket()
+	{
+		SECURE_ZERO_MEMORY();
+		oPacketHeader.ePacketType = HandShake;
+	}
+
+	uint8_t isClientConnected;
+};
+
+struct CreatePlayerPacket : public Packet
+{
+	CreatePlayerPacket()
+	{
+		SECURE_ZERO_MEMORY();
+		oPacketHeader.ePacketType = CreatePlayer;
+	}
+
+	uint8_t id;
+};
+
 struct WelcomePacket : public Packet
 {
 	WelcomePacket()
@@ -65,6 +90,20 @@ struct WorldStatePacket : public Packet
 
 	int playerCount;
 	PlayerState players[Globals::nMaxPlayers];
+};
+
+struct PlayerInputPacket : public Packet
+{
+	PlayerInputPacket()
+	{
+		SECURE_ZERO_MEMORY();
+		oPacketHeader.ePacketType = PlayerInput;
+	}
+
+	int id;
+	float movX;
+	float movY;
+	float velocity;
 };
 
 #pragma pack(pop)

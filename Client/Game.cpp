@@ -7,8 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "Player.h"
 
-glm::vec3 m_oPlayerPosition = glm::vec3(0);
-float m_fPlayerVelocity = 2.0;
+int m_PlayerId = -1;
 
 Game::Game() 
 {
@@ -22,11 +21,11 @@ bool Game::Start()
 {
 	std::cout << "Connecting to server...." << std::endl;
 
-	bool connected = false;
-
-	do {
-		connected = ConnectToServer();
-	} while (!connected);
+	if (!ConnectToServer())
+	{
+		std::cerr << "Failed to connect to the server." << std::endl;
+		return false;
+	}
 
 	if (!glfwInit())
 	{
@@ -50,7 +49,7 @@ bool Game::Start()
 	
 	glViewport(0, 0, Globals::nWindowWidth, Globals::nWindowHeight);
 	glfwSetFramebufferSizeCallback(m_pWindow, Game::framebuffer_size_callback);
-	glfwSetKeyCallback(m_pWindow, Game::key_callback);
+	glfwSetWindowUserPointer(m_pWindow, this);
 
 	return true;
 }
@@ -66,23 +65,20 @@ bool Game::ConnectToServer()
 		return false;
 	}
 
-	char* pPacketData = nullptr;
-	PacketTypes ePacketType = Undefined;
-	m_Client.ReceivePackets(ePacketType, pPacketData);
+	std::cout << "Succsessfully connected to the server." << std::endl;
 
-	if (!HandlePacket(ePacketType, pPacketData))
+	CreatePlayerPacket oCreatePlayerPacket;
+	if (!m_Client.SendPacket<CreatePlayerPacket>(oCreatePlayerPacket))
 	{
+		std::cerr << "Error initializing the player." << std::endl;
 		return false;
 	}
-
-	std::cout << "Succsessfully connected to the server." << std::endl;
 
 	return true;
 }
 
 void Game::Run()
 {
-	m_oPlayerPosition = glm::vec3((float)Globals::nWindowWidth / 2, (float)Globals::nWindowHeight / 2, 0.0);
 	//m_oViewMatrix = glm::translate(m_oViewMatrix, glm::vec3(0, 0, 3.f));
 	m_oProjectionMatrix = glm::ortho(0.0f, (float)Globals::nWindowWidth, 0.0f, (float)Globals::nWindowHeight, -0.1f, 1.0f);
 
@@ -181,6 +177,8 @@ bool Game::HandlePacket(PacketTypes ePacketType, char* pPacketData)
 
 void Game::Update() 
 {
+	InputHandling();
+
 	char* pPacketData = nullptr;
 	PacketTypes ePacketType = Undefined;
 	if (m_Client.ReceivePackets(ePacketType, pPacketData))
@@ -219,11 +217,15 @@ void Game::UpdateWordlState(const Packet& oPacket)
 		{
 			pCurrentPlayer = new Player();
 			pCurrentPlayer->nId = oWorldStatePacket->players[i].nId;
-			pCurrentPlayer->x = oWorldStatePacket->players[i].x;
-			pCurrentPlayer->y = oWorldStatePacket->players[i].y;
 
 			m_oPlayers[i] = pCurrentPlayer;
+
+			if (pCurrentPlayer->nId == m_PlayerId)
+				m_oPlayer = m_oPlayers[i];
 		}
+
+		pCurrentPlayer->x = oWorldStatePacket->players[i].x;
+		pCurrentPlayer->y = oWorldStatePacket->players[i].y;
 	}
 }
 
@@ -232,13 +234,31 @@ void Game::framebuffer_size_callback(GLFWwindow* window, int width, int height)
 	glViewport(0, 0, width, height);
 }
 
-void Game::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) 
+void Game::InputHandling()
 {
-	if (key == GLFW_KEY_A && action == GLFW_PRESS) {
-		m_oPlayerPosition.x -= m_fPlayerVelocity;
-	}
+	float moveX = 0.0f;
+	float moveY = 0.0f;
 
-	if (key == GLFW_KEY_D && action == GLFW_PRESS) {
-		m_oPlayerPosition.x += m_fPlayerVelocity;
+	if (glfwGetKey(m_pWindow, GLFW_KEY_A) == GLFW_PRESS)
+		moveX -= 1.0f;
+
+	if (glfwGetKey(m_pWindow, GLFW_KEY_D) == GLFW_PRESS)
+		moveX += 1.0f;
+
+	if (glfwGetKey(m_pWindow, GLFW_KEY_W) == GLFW_PRESS)
+		moveY += 1.0f;
+
+	if (glfwGetKey(m_pWindow, GLFW_KEY_S) == GLFW_PRESS)
+		moveY -= 1.0f;
+
+	if (moveX != 0 || moveY != 0)
+	{
+		PlayerInputPacket packet{};
+		packet.id = m_PlayerId;
+		packet.movX = moveX;
+		packet.movY = moveY;
+		packet.velocity = 50;
+
+		m_Client.SendPacket(packet);
 	}
 }

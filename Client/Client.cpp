@@ -1,7 +1,13 @@
 #include "Client.h"
 #include <ws2tcpip.h>
+#include <chrono>
+#include <thread>
 
 #define MESSAGE_BUFFER_SIZE 1024
+
+using namespace std::this_thread;     
+using namespace std::chrono_literals;
+using std::chrono::system_clock;
 
 Client::Client()
 {
@@ -13,9 +19,10 @@ Client::~Client()
 
 bool Client::ConnectToServer(const std::string strServerIp, const std::string strServerPort)
 {
-
 	if (m_oClientSocket != INVALID_SOCKET)
 		return true;
+
+	m_eClientConnectionStatus = Connecting;
 
 	m_strServerIp = strServerIp;
 	m_strServerPort = strServerPort;
@@ -70,8 +77,6 @@ bool Client::ConnectToServer(const std::string strServerIp, const std::string st
 
 	if (m_oClientSocket == INVALID_SOCKET)
 	{
-		std::cerr << "Failed to create a socket to addrress " << pCurrentAddressInfo->ai_addr << std::endl;
-		freeaddrinfo(pCurrentAddressInfo);
 		WSACleanup();
 		return false;
 	}
@@ -79,12 +84,17 @@ bool Client::ConnectToServer(const std::string strServerIp, const std::string st
 	m_oServerAddress = *pCurrentAddressInfo->ai_addr;
 	freeaddrinfo(pCurrentAddressInfo);
 
-	ConnectPacket oConnectPacket;
-	if (!SendPacket<ConnectPacket>(oConnectPacket))
+	do
 	{
-		std::cerr << "An error ocurred while connection to the server" << std::endl;
-		return false;
-	}
+		sleep_for(2s);
+		sleep_until(system_clock::now() + 1s);
+
+		if (!GetServerHandShake())
+			continue;
+
+		m_eClientConnectionStatus = Connected;
+
+	} while (m_eClientConnectionStatus == Connecting);
 
 	return true;
 }
@@ -116,7 +126,7 @@ bool Client::ReceivePackets(PacketTypes& ePacketType, char*& pPacketData)
 		}
 
 		// Реална socket грешка.
-		std::cerr << "recvfrom failed: " << error << '\n';
+		//std::cerr << "recvfrom failed: " << error << '\n';
 		return false;
 	}
 
@@ -137,6 +147,28 @@ bool Client::ReceivePackets(PacketTypes& ePacketType, char*& pPacketData)
 
 	ePacketType = pPacketHeader->ePacketType;
 	memcpy(pPacketData, messageBuffer, receivedBytes);
+
+	return true;
+}
+
+bool Client::GetServerHandShake()
+{
+	ConnectPacket oConnectPacket;
+	if (!SendPacket<ConnectPacket>(oConnectPacket))
+	{
+		std::cerr << "An error ocurred while connection to the server" << std::endl;
+		return false;
+	}
+
+	PacketTypes ePacketType = Undefined;
+	char* pPacketData = nullptr;
+
+	if (!ReceivePackets(ePacketType, pPacketData))
+		return false;
+
+	HandShakePacket* pHandShakePacket = reinterpret_cast<HandShakePacket*>(pPacketData);
+	if (!pHandShakePacket)
+		return false;
 
 	return true;
 }

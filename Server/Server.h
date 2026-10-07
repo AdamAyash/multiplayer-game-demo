@@ -49,17 +49,20 @@ private:
         return true;
 	}
 
-	bool HandlePacket(const PacketTypes& ePacketType, const sockaddr_in& clientAddress, const char* pPacketData);
-	bool RegisterPlayer(const sockaddr_in& clientAddress);
+	bool HandlePacket(const PacketTypes& ePacketType, const sockaddr_in& clientAddress, char* pPacketData);
+	bool CreateNewPlayer(const sockaddr_in& clientAddress);
+    void UpdatePlayer(PlayerInputPacket* pPlayerInputPacket);
 	bool ShutDown();
 
-	bool UpdateWorldState();
+	bool UpdateWorldState(float deltaTime);
 
 private:
 	SOCKET m_oServerSocket = INVALID_SOCKET;
 	std::string m_strServerIP;
 	bool m_bIsServerRuning = false;
 	std::vector<Player> m_oPlayers;
+
+    float m_deltaTime = 0;
 
 	int m_NextPlayerId = 1;
 };

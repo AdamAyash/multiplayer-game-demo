@@ -1,6 +1,7 @@
 ﻿#include "Server.h"
 #include <ws2tcpip.h>
 #include <NetworkUtilities.h>
+#include <chrono>
 
 #define DEFAULT_PORT "3000"
 #define MESSAGE_BUFFER_SIZE 1024
@@ -97,12 +98,23 @@ bool Server::Start()
 
 void Server::Run()
 {
+	auto lastTime = std::chrono::steady_clock::now();
+
 	while (m_bIsServerRuning)
 	{
+		auto currentTime = std::chrono::steady_clock::now();
+
+		 m_deltaTime =
+			std::chrono::duration<float>(
+				currentTime - lastTime
+			).count();
+
+		lastTime = currentTime;
+
 		RecievePacket();
 		
 		if (m_oPlayers.size() > 0)
-			UpdateWorldState();
+			UpdateWorldState(m_deltaTime);
 	}
 }
 
@@ -133,7 +145,7 @@ void Server::RecievePacket()
 		}
 
 		// Реална socket грешка.
-		std::cerr << "recvfrom failed: " << error << '\n';
+		//std::cerr << "recvfrom failed: " << error << '\n';
 		return;
 	}
 
@@ -160,13 +172,29 @@ void Server::RecievePacket()
 
 }
 
-bool Server::HandlePacket(const PacketTypes& ePacketType, const sockaddr_in& clientAddress, const char* pPacketData)
+bool Server::HandlePacket(const PacketTypes& ePacketType, const sockaddr_in& clientAddress, char* pPacketData)
 {
 	switch (ePacketType)
 	{
 	case Connect:
 	{
-		RegisterPlayer(clientAddress);
+		HandShakePacket oHandshakePacket;
+		oHandshakePacket.isClientConnected = 1;
+
+		SendPacket<HandShakePacket>(oHandshakePacket, clientAddress);
+		break;
+	}
+	case CreatePlayer:
+	{
+		CreateNewPlayer(clientAddress);
+		break;
+	}
+
+	case PlayerInput:
+	{
+		PlayerInputPacket* pPlayerInputPacket = reinterpret_cast<PlayerInputPacket*>(pPacketData);
+
+		UpdatePlayer(pPlayerInputPacket);
 		break;
 	}
 
@@ -178,7 +206,7 @@ bool Server::HandlePacket(const PacketTypes& ePacketType, const sockaddr_in& cli
 	return true;
 }
 
-bool Server::RegisterPlayer(const sockaddr_in& clientAddress)
+bool Server::CreateNewPlayer(const sockaddr_in& clientAddress)
 {
 	if (m_oPlayers.size() + 1 > Globals::nMaxPlayers)
 	{
@@ -207,13 +235,33 @@ bool Server::RegisterPlayer(const sockaddr_in& clientAddress)
 	return true;
 }
 
+void Server::UpdatePlayer(PlayerInputPacket* pPlayerInputPacket)
+{
+	for (int i = 0; i < m_oPlayers.size(); ++i)
+	{
+		Player oCurrentPlayer = m_oPlayers[i];
+
+		if (oCurrentPlayer.nId != pPlayerInputPacket->id)
+			continue;
+
+		if(pPlayerInputPacket->movX != 0)
+			oCurrentPlayer.x += pPlayerInputPacket->movX * pPlayerInputPacket->velocity * m_deltaTime;
+
+		if(pPlayerInputPacket->movY != 0)
+			oCurrentPlayer.y += pPlayerInputPacket->movY * pPlayerInputPacket->velocity * m_deltaTime;
+
+		m_oPlayers[i] = oCurrentPlayer;
+		return;
+	}
+}
+
 bool Server::ShutDown()
 {
 	WSACleanup();
 	return true;
 }
 
-bool Server::UpdateWorldState()
+bool Server::UpdateWorldState(float deltaTime)
 {
 	WorldStatePacket oWorldStatePacket;
 	oWorldStatePacket.playerCount = m_oPlayers.size();

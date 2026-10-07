@@ -5,6 +5,13 @@
 #include "PacketTypes.h"
 #include <iostream>
 
+enum ClientConnectionStatus
+{
+    Disconnected,
+    Connecting,
+    Connected
+};
+
 class Client final 
 {
 public:
@@ -46,8 +53,12 @@ public:
 	bool ReceivePackets(PacketTypes& ePacketType, char*& pPacketData);
 
 private:
+    bool GetServerHandShake();
+
+private:
 	SOCKET m_oClientSocket = INVALID_SOCKET;
 	std::string m_strServerIp;
 	std::string m_strServerPort;
-	sockaddr m_oServerAddress;
+    sockaddr m_oServerAddress;
+    ClientConnectionStatus m_eClientConnectionStatus = Disconnected;
 };
