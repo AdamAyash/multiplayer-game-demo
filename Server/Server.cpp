@@ -98,13 +98,18 @@ bool Server::Start()
 
 void Server::Run()
 {
-	auto lastTime = std::chrono::steady_clock::now();
+	using clock = std::chrono::steady_clock;
+
+	auto lastTime = clock::now();
+	float snapshotAccumulator = 0.0f;
+
+	constexpr float snapshotInterval = 1.0f / 20.0f; // 20 times/sec
 
 	while (m_bIsServerRuning)
 	{
-		auto currentTime = std::chrono::steady_clock::now();
+		auto currentTime = clock::now();
 
-		 m_deltaTime =
+		float deltaTime =
 			std::chrono::duration<float>(
 				currentTime - lastTime
 			).count();
@@ -112,64 +117,73 @@ void Server::Run()
 		lastTime = currentTime;
 
 		RecievePacket();
+
+		snapshotAccumulator += deltaTime;
 		
-		if (m_oPlayers.size() > 0)
-			UpdateWorldState(m_deltaTime);
+		if (snapshotAccumulator >= snapshotInterval)
+		{
+			if (m_oPlayers.size() > 0)
+				UpdateWorldState();
+
+			snapshotAccumulator -= snapshotInterval;
+		}
 	}
 }
 
 void Server::RecievePacket()
 {
-	char messageBuffer[MESSAGE_BUFFER_SIZE];
-
-	sockaddr_in clientAddress{};
-	int clientAddressSize = sizeof(clientAddress);
-
-	int receivedBytes = recvfrom(
-		m_oServerSocket,
-		messageBuffer,
-		MESSAGE_BUFFER_SIZE - 1,
-		0,
-		reinterpret_cast<sockaddr*>(&clientAddress),
-		&clientAddressSize
-	);
-
-	if (receivedBytes == SOCKET_ERROR)
+	while (true)
 	{
-		int error = WSAGetLastError();
+		char messageBuffer[MESSAGE_BUFFER_SIZE];
 
-		if (error == WSAEWOULDBLOCK)
+		sockaddr_in clientAddress{};
+		int clientAddressSize = sizeof(clientAddress);
+
+		int receivedBytes = recvfrom(
+			m_oServerSocket,
+			messageBuffer,
+			MESSAGE_BUFFER_SIZE - 1,
+			0,
+			reinterpret_cast<sockaddr*>(&clientAddress),
+			&clientAddressSize
+		);
+
+		if (receivedBytes == SOCKET_ERROR)
 		{
-			// Няма пакет в момента.
+			int error = WSAGetLastError();
+
+			if (error == WSAEWOULDBLOCK)
+			{
+				// Няма пакет в момента.
+				break;
+			}
+
+			// Реална socket грешка.
+			std::cerr << "recvfrom failed: " << error << '\n';
 			return;
 		}
 
-		// Реална socket грешка.
-		//std::cerr << "recvfrom failed: " << error << '\n';
-		return;
+		if (receivedBytes < sizeof(PacketHeader))
+		{
+			std::cerr << "Corrupted packet recieved" << std::endl;
+			return;
+		}
+
+		const PacketHeader* pPacketPacket = reinterpret_cast<PacketHeader*>(messageBuffer);
+		if (!pPacketPacket)
+		{
+			std::cerr << "An erro occured while desiriliazing a packet" << std::endl;
+			return;
+		}
+
+		if (!HandlePacket(pPacketPacket->ePacketType, clientAddress, messageBuffer))
+		{
+			std::cerr << "An erro occured while handling a packet" << std::endl;
+			return;
+		}
+
+		messageBuffer[receivedBytes] = '\0';
 	}
-
-	if (receivedBytes < sizeof(PacketHeader))
-	{
-		std::cerr << "Corrupted packet recieved" << std::endl;
-		return;
-	}
-
-	const PacketHeader* pPacketPacket = reinterpret_cast<PacketHeader*>(messageBuffer);
-	if (!pPacketPacket)
-	{
-		std::cerr << "An erro occured while desiriliazing a packet" << std::endl;
-		return;
-	}
-
-	if (!HandlePacket(pPacketPacket->ePacketType, clientAddress, messageBuffer))
-	{
-		std::cerr << "An erro occured while handling a packet" << std::endl;
-		return;
-	}
-
-	messageBuffer[receivedBytes] = '\0';
-
 }
 
 bool Server::HandlePacket(const PacketTypes& ePacketType, const sockaddr_in& clientAddress, char* pPacketData)
@@ -193,7 +207,6 @@ bool Server::HandlePacket(const PacketTypes& ePacketType, const sockaddr_in& cli
 	case PlayerInput:
 	{
 		PlayerInputPacket* pPlayerInputPacket = reinterpret_cast<PlayerInputPacket*>(pPacketData);
-
 		UpdatePlayer(pPlayerInputPacket);
 		break;
 	}
@@ -245,10 +258,10 @@ void Server::UpdatePlayer(PlayerInputPacket* pPlayerInputPacket)
 			continue;
 
 		if(pPlayerInputPacket->movX != 0)
-			oCurrentPlayer.x += pPlayerInputPacket->movX * pPlayerInputPacket->velocity * m_deltaTime;
+			oCurrentPlayer.x += pPlayerInputPacket->movX * pPlayerInputPacket->velocity ;
 
 		if(pPlayerInputPacket->movY != 0)
-			oCurrentPlayer.y += pPlayerInputPacket->movY * pPlayerInputPacket->velocity * m_deltaTime;
+			oCurrentPlayer.y += pPlayerInputPacket->movY * pPlayerInputPacket->velocity ;
 
 		m_oPlayers[i] = oCurrentPlayer;
 		return;
@@ -261,7 +274,7 @@ bool Server::ShutDown()
 	return true;
 }
 
-bool Server::UpdateWorldState(float deltaTime)
+bool Server::UpdateWorldState()
 {
 	WorldStatePacket oWorldStatePacket;
 	oWorldStatePacket.playerCount = m_oPlayers.size();

@@ -86,7 +86,7 @@ bool Client::ConnectToServer(const std::string strServerIp, const std::string st
 
 	do
 	{
-		sleep_for(2s);
+		sleep_for(1s);
 		sleep_until(system_clock::now() + 1s);
 
 		if (!GetServerHandShake())

@@ -54,15 +54,13 @@ private:
     void UpdatePlayer(PlayerInputPacket* pPlayerInputPacket);
 	bool ShutDown();
 
-	bool UpdateWorldState(float deltaTime);
+	bool UpdateWorldState();
 
 private:
 	SOCKET m_oServerSocket = INVALID_SOCKET;
 	std::string m_strServerIP;
 	bool m_bIsServerRuning = false;
 	std::vector<Player> m_oPlayers;
-
-    float m_deltaTime = 0;
 
 	int m_NextPlayerId = 1;
 };

@@ -19,8 +19,6 @@ Game::~Game()
 
 bool Game::Start()
 {
-	std::cout << "Connecting to server...." << std::endl;
-
 	if (!ConnectToServer())
 	{
 		std::cerr << "Failed to connect to the server." << std::endl;
@@ -56,8 +54,16 @@ bool Game::Start()
 
 bool Game::ConnectToServer()
 {
-	std::string strIPAddress = "127.0.0.1";
-	std::string portNumber = "3000";
+	std::string strIPAddress;
+	std::string portNumber;
+
+	std::cout << "Enter server ip address: ";
+	std::cin >> strIPAddress;
+
+	std::cout << "Enter server port: ";
+	std::cin >> portNumber;
+
+	std::cout << "Connecting to server...." << std::endl;
 
 	if (!m_Client.ConnectToServer(strIPAddress, portNumber))
 	{
@@ -146,8 +152,9 @@ void Game::Run()
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 		}
 
-		glfwSwapBuffers(m_pWindow);
 		glfwPollEvents();
+		glfwSwapBuffers(m_pWindow);
+
 	}
 
 	glfwTerminate();
@@ -257,7 +264,16 @@ void Game::InputHandling()
 		packet.id = m_PlayerId;
 		packet.movX = moveX;
 		packet.movY = moveY;
-		packet.velocity = 50;
+		packet.velocity = 10;
+
+		if (m_oPlayer)
+		{
+			if (packet.movX != 0)
+				m_oPlayer->x += packet.movX * packet.velocity;
+
+			if (packet.movY != 0)
+				m_oPlayer->y += packet.movY * packet.velocity;
+		}
 
 		m_Client.SendPacket(packet);
 	}
